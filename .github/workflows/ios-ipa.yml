@@ -40,6 +40,13 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Ensure Stockfish NNUE nets (iOS Release LTO)
+        working-directory: .
+        run: |
+          set -euo pipefail
+          chmod +x scripts/ensure-stockfish-nnue.sh
+          ./scripts/ensure-stockfish-nnue.sh
+
       - name: Build unsigned IPA
         run: |
           set -euo pipefail

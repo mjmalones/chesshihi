@@ -12,6 +12,8 @@
 Icon?
 **/Pods/
 **/.symlinks/
+# Stockfish NNUE (downloaded by scripts/ensure-stockfish-nnue.sh; ~108MB)
+*.nnue
 profile
 xcuserdata
 **/.generated/

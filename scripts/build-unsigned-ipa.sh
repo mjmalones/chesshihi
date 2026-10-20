@@ -29,6 +29,10 @@ cd "$APP"
 echo "==> flutter pub get"
 flutter pub get
 
+echo "==> ensure Stockfish NNUE nets (iOS Release LTO)"
+# stockfish 1.8.x: nets must sit in Stockfish/src and Pods/ for Release archive.
+"$ROOT/scripts/ensure-stockfish-nnue.sh"
+
 echo "==> flutter build ipa --no-codesign"
 # Produce an IPA without Apple signing; Karl’s external signer re-signs later.
 flutter build ipa --no-codesign --export-method ad-hoc 2>/dev/null \
