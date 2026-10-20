@@ -76,6 +76,12 @@ The unsigned IPA embeds `Runner.app/PlugIns/BroadcastUploadExtension.appex`. Run
 
 → Full setup, Karl’s signer checklist, and on-device test steps: **[replaykit.md](replaykit.md)**
 
+## Vision / native deps
+
+Board recognition is **pure Dart** (`package:image` template matching). No OpenCV iOS, no extra FFI, no new frameworks for Karl’s signer beyond the existing app + Broadcast Upload Extension + App Group. NNUE ensure script is unchanged.
+
+→ Capabilities and limits: **[vision.md](vision.md)**
+
 ## Verify the Flutter app without an IPA (Linux)
 
 ```bash

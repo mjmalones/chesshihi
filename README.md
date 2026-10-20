@@ -7,13 +7,13 @@ Two slices live in this repo:
 | Slice | Path | What it does |
 |-------|------|----------------|
 | Python vision PoC | `src/chesshihi/` | Screenshot → OpenCV FEN → system Stockfish (Linux) |
-| Flutter iOS app | `app/` | Photos/sample/ReplayKit board → FEN (stub/samples) → on-device Stockfish → TTS |
+| Flutter iOS app | `app/` | Photos/sample/ReplayKit board → on-device vision → FEN → Stockfish → TTS |
 
 ## Hard constraint: no Linux → IPA
 
 **Flutter cannot build iOS without macOS + Xcode.** Linux/Windows Flutter will not emit an `.ipa`. Karl has **no Mac**, so the supported path is **cloud macOS CI** that produces an **unsigned IPA** for his external signer (Sideloadly / AltStore / etc.). No Apple Developer paid account is required for the build step.
 
-→ Full steps: **[docs/ios-sideload.md](docs/ios-sideload.md)** · ReplayKit: **[docs/replaykit.md](docs/replaykit.md)**
+→ Full steps: **[docs/ios-sideload.md](docs/ios-sideload.md)** · ReplayKit: **[docs/replaykit.md](docs/replaykit.md)** · Vision: **[docs/vision.md](docs/vision.md)**
 
 ### Get an IPA for your signer (primary: Codemagic)
 
@@ -33,9 +33,11 @@ Local Mac helper (optional, not required): `./scripts/build-unsigned-ipa.sh` →
 Minimal device slice:
 
 - Pick a board screenshot from Photos, use shipped sample assets, or **ReplayKit** broadcast (Control Center → Screen Recording → Chesshihi)
-- Show recognized FEN (samples map to canned FENs; Photos/camera/broadcast use a **stub FEN** with a clear TODO to port the OpenCV PoC)
+- **On-device vision** (pure-Dart template matching, same concepts as the Python OpenCV PoC) → real FEN, or a clear error if no board is found
+- Assumes **White at bottom**; set **Side to move** in the UI (vision does not read clocks)
 - Run on-device Stockfish (`stockfish` Flutter package) and **speak** the best move (`flutter_tts`)
 - Fair-play banner in the UI — no silent Chess.com capture
+- **No new native deps** for vision (no OpenCV iOS) — Codemagic unsigned IPA / NNUE script unchanged
 
 ### Develop / verify on Linux
 
@@ -52,12 +54,12 @@ flutter test
 
 | Python PoC | Flutter / iOS |
 |------------|----------------|
-| `vision/template_matcher.py` | Port to Dart FFI / on-device ML (TODO in `app/lib/vision/`) |
+| `vision/template_matcher.py` | `app/lib/vision/template_matcher.dart` (pure Dart; pluggable for ML later) |
 | Same FEN string | Same FEN string to Stockfish UCI |
 | System Stockfish UCI | `stockfish` package (iOS/Android FFI) |
 | CLI print | TTS + Semantics announcements |
 
-Keep the Python PoC; the Flutter app stubs vision until that port lands.
+Keep the Python PoC for Linux smoke tests; the Flutter app runs the Dart port on device.
 
 ---
 
@@ -89,6 +91,8 @@ uv run pytest -q
 ```
 app/                      # Flutter Chesshihi (iOS + Android targets)
 docs/ios-sideload.md      # Unsigned IPA via Codemagic / GHA (no local Mac)
+docs/replaykit.md         # Broadcast capture + signer checklist
+docs/vision.md            # Pixels → FEN: capabilities & limits
 codemagic.yaml            # Primary cloud macOS IPA workflow
 .github/workflows/ios-ipa.yml
 scripts/build-unsigned-ipa.sh

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chesshihi/capture/replaykit_service.dart';
 import 'package:chesshihi/engine/fen.dart';
 import 'package:chesshihi/engine/stockfish_service.dart';
@@ -97,19 +99,31 @@ void main() {
     expect(state.appGroupId, 'group.com.chesshihi.chesshihi');
   });
 
-  test('sample assets map to known FENs', () {
+  test('sample assets map to known FENs via vision', () async {
     final r = BoardRecognizer();
-    final start = r.recognize(assetPath: 'assets/samples/starting_position.png');
-    expect(start.fen, BoardRecognizer.startingFen);
+    await r.ensureReadyFromDirectory(Directory('assets/templates'));
+
+    final startBytes =
+        await File('assets/samples/starting_position.png').readAsBytes();
+    final start = await r.recognizeBytes(
+      startBytes,
+      source: RecognitionSource.sampleAsset,
+      castling: 'KQkq',
+    );
+    expect(start.success, isTrue);
+    expect(start.fen!.split(' ').first, BoardRecognizer.startingFen.split(' ').first);
     expect(start.isStub, isFalse);
-    expect(FenPosition(start.fen).isWhiteToMove, isTrue);
+    expect(FenPosition(start.fen!).isWhiteToMove, isTrue);
 
-    final italian = r.recognize(assetPath: 'assets/samples/italian_game.png');
-    expect(italian.fen, BoardRecognizer.italianFen);
-    expect(FenPosition(italian.fen).isWhiteToMove, isFalse);
-
-    final stub = r.recognize(pickedLabel: 'photo.jpg');
-    expect(stub.isStub, isTrue);
+    final italianBytes =
+        await File('assets/samples/italian_game.png').readAsBytes();
+    final italian = await r.recognizeBytes(
+      italianBytes,
+      source: RecognitionSource.sampleAsset,
+      castling: 'KQkq',
+    );
+    expect(italian.fen!.split(' ').first, BoardRecognizer.italianFen.split(' ').first);
+    expect(FenPosition(italian.fen!).isWhiteToMove, isTrue);
   });
 
   test('FenPosition can flip side to move', () {
