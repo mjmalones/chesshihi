@@ -11,7 +11,7 @@
 | Host bridge | `app/ios/Runner/ReplayKitBridge.swift` | Method channel `chesshihi/replaykit` → `getState` / `clearState` |
 | Flutter poller + UI | `app/lib/capture/`, `app/lib/main.dart` | Instructions, connection status, throttle / identical-frame skip → existing analyze path |
 
-Vision/FEN for broadcast frames is still **stubbed** (same as Photos/camera). Frames still exercise preview → recognize → Stockfish → optional TTS.
+Vision runs the on-device **template-matching** pipeline (same as Photos/camera/samples) → real FEN when a board is found, or a clear error when not. See [vision.md](vision.md). Frames still feed preview → recognize → Stockfish → optional TTS.
 
 ## App Group / entitlements
 
@@ -53,7 +53,7 @@ If the App Group is missing after sideload, the UI status will show App Group / 
 3. Open **Control Center** → long-press **Screen Recording**.
 4. Select **Chesshihi** as the broadcast destination → **Start Broadcast**.
 5. Switch to a board you want to **review / train** (not for live rated assist).
-6. Return to Chesshihi: status should show broadcasting; preview updates when frames change; stub FEN + analyze run when Live watch is on.
+6. Return to Chesshihi: status should show broadcasting; preview updates when frames change; recognized FEN (or a board-not-found error) + analyze when Live watch is on and recognition succeeds.
 7. Stop broadcast from the status bar / Control Center → status becomes finished / idle.
 
 Identical frames are skipped (extension hash + host `FrameIngestPolicy`). Writes are throttled (~2 fps max).
@@ -67,5 +67,6 @@ Identical frames are skipped (extension hash + host `FrameIngestPolicy`). Writes
 
 ## Related
 
+- Vision / FEN limits: [vision.md](vision.md)
 - Sideload / Codemagic: [ios-sideload.md](ios-sideload.md)
 - Flutter app notes: [../app/README.md](../app/README.md)

@@ -52,7 +52,7 @@ class _HomePageState extends State<HomePage> {
   final _announcer = MoveAnnouncer();
   final _picker = ImagePicker();
   final _replayKit = ReplayKitService();
-  final _frameIngest = FrameIngest();
+  late final _frameIngest = FrameIngest(recognizer: _recognizer);
   final _framePolicy = const FrameIngestPolicy();
 
   String? _imageLabel;
@@ -85,10 +85,17 @@ class _HomePageState extends State<HomePage> {
       path: 'assets/samples/italian_game.png',
       label: 'Italian Game (sample)',
     ),
+    (
+      path: 'assets/samples/kings_queen_endgame.png',
+      label: 'K+Q endgame (sample)',
+    ),
   ];
 
-  FenPosition? get _fen =>
-      _recognition == null ? null : FenPosition(_recognition!.fen);
+  FenPosition? get _fen {
+    final fen = _recognition?.fen;
+    if (fen == null) return null;
+    return FenPosition(fen);
+  }
 
   @override
   void initState() {
@@ -109,7 +116,11 @@ class _HomePageState extends State<HomePage> {
       if (label != null) _imageLabel = label;
       _recognition = result;
       _engineResult = null;
-      _error = null;
+      if (!result.success) {
+        _error = result.note;
+      } else {
+        _error = null;
+      }
     });
   }
 
@@ -117,10 +128,25 @@ class _HomePageState extends State<HomePage> {
     ({String path, String label}) sample,
   ) async {
     setState(() {
+      _busy = true;
       _imageLabel = sample.label;
       _preview = AssetImage(sample.path);
+      _error = null;
     });
-    _setRecognition(_recognizer.recognize(assetPath: sample.path));
+    try {
+      final side = _fen?.sideToMove ?? 'w';
+      final result = await _recognizer.recognizeAsset(
+        sample.path,
+        sideToMove: side,
+      );
+      if (!mounted) return;
+      _setRecognition(result, label: sample.label);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Recognition error: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -140,30 +166,49 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  /// Apply current side-to-move to a freshly recognized (often stub) FEN.
+  /// Apply current side-to-move to a freshly recognized FEN.
   RecognitionResult _withCurrentSide(RecognitionResult result) {
+    final fen = result.fen;
+    if (!result.success || fen == null) return result;
     final side = _fen?.sideToMove;
     if (side == null) return result;
-    final nextFen = FenPosition(result.fen).withSideToMove(side);
-    if (nextFen == result.fen) return result;
+    final nextFen = FenPosition(fen).withSideToMove(side);
+    if (nextFen == fen) return result;
     return RecognitionResult(
       fen: nextFen,
       source: result.source,
       note: result.note,
+      success: true,
+      confidence: result.confidence,
     );
   }
 
   Future<void> _ingestLocalFile(File file, {required String label}) async {
     setState(() {
+      _busy = true;
       _imageLabel = label;
       _preview = FileImage(file);
+      _error = null;
     });
-    final recognized = _withCurrentSide(
-      _frameIngest.recognizeFile(file, label: label),
-    );
-    _setRecognition(recognized);
-    if (_liveWatch || _screenCaptureWatch) {
-      await _analyze();
+    try {
+      final side = _fen?.sideToMove ?? 'w';
+      final recognized = _withCurrentSide(
+        await _frameIngest.recognizeFile(
+          file,
+          label: label,
+          sideToMove: side,
+        ),
+      );
+      if (!mounted) return;
+      _setRecognition(recognized);
+      if (recognized.success && (_liveWatch || _screenCaptureWatch)) {
+        await _analyze();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Recognition error: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -209,22 +254,32 @@ class _HomePageState extends State<HomePage> {
 
   void _setSideToMove(String side) {
     final current = _recognition;
-    if (current == null) return;
-    final nextFen = FenPosition(current.fen).withSideToMove(side);
-    if (nextFen == current.fen) return;
+    final fen = current?.fen;
+    if (current == null || fen == null || !current.success) return;
+    final nextFen = FenPosition(fen).withSideToMove(side);
+    if (nextFen == fen) return;
     _setRecognition(
       RecognitionResult(
         fen: nextFen,
         source: current.source,
         note: '${current.note} Side to move set manually to '
             '${side == 'w' ? 'White' : 'Black'} — Stockfish will analyze for that side.',
+        success: true,
+        confidence: current.confidence,
       ),
     );
   }
 
   Future<void> _analyze({bool? speakOverride}) async {
     final recognition = _recognition;
-    if (recognition == null) return;
+    final fen = recognition?.fen;
+    if (recognition == null || fen == null || !recognition.success) {
+      setState(() {
+        _error = recognition?.note ??
+            'No board position to analyze — pick a clear board image first.';
+      });
+      return;
+    }
 
     setState(() {
       _busy = true;
@@ -233,7 +288,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final result = await _engine.analyze(recognition.fen);
+      final result = await _engine.analyze(fen);
       if (!mounted) return;
       setState(() => _engineResult = result);
 
@@ -345,48 +400,67 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               const SizedBox(height: 20),
-              if (recognition != null && fen != null) ...[
-                _SectionLabel('Side to move'),
-                Text(
-                  'Stockfish only analyzes the side in the FEN. '
-                  'Vision cannot see clocks yet — set this if the turn looks wrong.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+              if (recognition != null) ...[
+                if (fen != null) ...[
+                  _SectionLabel('Side to move'),
+                  Text(
+                    'Stockfish only analyzes the side in the FEN. '
+                    'Vision assumes White at bottom and cannot see clocks — '
+                    'set this if the turn looks wrong.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'w',
+                        label: Text('White'),
+                        icon: Icon(Icons.circle_outlined),
                       ),
-                ),
-                const SizedBox(height: 8),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'w', label: Text('White'), icon: Icon(Icons.circle_outlined)),
-                    ButtonSegment(value: 'b', label: Text('Black'), icon: Icon(Icons.circle)),
-                  ],
-                  selected: {fen.sideToMove},
-                  onSelectionChanged: _busy
-                      ? null
-                      : (set) => _setSideToMove(set.first),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  fen.sideToMoveLabel,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      ButtonSegment(
+                        value: 'b',
+                        label: Text('Black'),
+                        icon: Icon(Icons.circle),
                       ),
-                ),
-                const SizedBox(height: 16),
-                _SectionLabel('Recognized FEN'),
-                SelectableText(
-                  recognition.fen,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontFamily: 'monospace',
-                      ),
-                ),
+                    ],
+                    selected: {fen.sideToMove},
+                    onSelectionChanged: _busy
+                        ? null
+                        : (set) => _setSideToMove(set.first),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    fen.sideToMoveLabel,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  _SectionLabel('Recognized FEN'),
+                  SelectableText(
+                    recognition.fen!,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                  ),
+                ] else ...[
+                  _SectionLabel('Board recognition'),
+                  Text(
+                    'No FEN — board not found or image could not be read.',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: scheme.error,
+                        ),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Text(
                   recognition.note,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: recognition.isStub
-                            ? scheme.tertiary
-                            : scheme.onSurfaceVariant,
+                        color: recognition.success
+                            ? scheme.onSurfaceVariant
+                            : scheme.error,
                       ),
                 ),
               ],
@@ -405,9 +479,9 @@ class _HomePageState extends State<HomePage> {
                 title: const Text('Live watch (training / review)'),
                 subtitle: const Text(
                   'When on, each Capture frame / Photos pick / ReplayKit '
-                  'frame auto-analyzes for the selected side to move. '
-                  'Vision is still stubbed — set Side to move yourself. '
-                  'Not for live online engine assist.',
+                  'frame is recognized → FEN → auto-analyzed for the selected '
+                  'side to move. Set Side to move yourself (vision does not '
+                  'read clocks). Not for live online engine assist.',
                 ),
                 value: _liveWatch,
                 onChanged:
@@ -423,7 +497,12 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: _busy || recognition == null ? null : () => _analyze(),
+                onPressed: _busy ||
+                        recognition == null ||
+                        recognition.fen == null ||
+                        !recognition.success
+                    ? null
+                    : () => _analyze(),
                 icon: _busy
                     ? const SizedBox(
                         width: 18,

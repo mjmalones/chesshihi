@@ -235,4 +235,6 @@ def ensure_sample_assets(
     render_board(fen_placement, side_to_move=side_to_move).save(sample_path)
     mid = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R"
     render_board(mid, side_to_move="w").save(samples / "italian_game.png")
+    endgame = "8/8/8/3k4/8/8/4K3/7Q"
+    render_board(endgame, side_to_move="w").save(samples / "kings_queen_endgame.png")
     return sample_path, templates

@@ -16,6 +16,7 @@ ASSETS = ROOT / "assets"
 
 START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
 ITALIAN = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R"
+ENDGAME = "8/8/8/3k4/8/8/4K3/7Q"
 
 
 @pytest.fixture(scope="module")
@@ -36,6 +37,12 @@ def test_recognize_italian(assets: Path) -> None:
     recognizer = TemplateMatcherRecognizer(assets / "templates", castling="KQkq")
     result = recognizer.recognize(assets / "samples" / "italian_game.png")
     assert result.fen.split()[0] == ITALIAN
+
+
+def test_recognize_endgame(assets: Path) -> None:
+    recognizer = TemplateMatcherRecognizer(assets / "templates", castling="-")
+    result = recognizer.recognize(assets / "samples" / "kings_queen_endgame.png")
+    assert result.fen.split()[0] == ENDGAME
 
 
 def test_recognize_roundtrip_custom(assets: Path, tmp_path: Path) -> None:

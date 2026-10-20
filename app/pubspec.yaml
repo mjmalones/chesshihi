@@ -37,6 +37,7 @@ dependencies:
   stockfish: ^1.8.1
   image_picker: ^1.2.4
   flutter_tts: ^4.2.5
+  image: ^4.12.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -61,3 +62,4 @@ flutter:
 
   assets:
     - assets/samples/
+    - assets/templates/
