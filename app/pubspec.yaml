@@ -38,6 +38,7 @@ dependencies:
   image_picker: ^1.2.4
   flutter_tts: ^4.2.5
   image: ^4.12.0
+  chess: ^0.8.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -63,3 +64,19 @@ flutter:
   assets:
     - assets/samples/
     - assets/templates/
+
+  fonts:
+    - family: Fraunces
+      fonts:
+        - asset: assets/fonts/Fraunces-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Fraunces-Bold.ttf
+          weight: 700
+    - family: SourceSans3
+      fonts:
+        - asset: assets/fonts/SourceSans3-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SourceSans3-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SourceSans3-Bold.ttf
+          weight: 700
