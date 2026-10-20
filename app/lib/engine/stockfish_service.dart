@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:stockfish/stockfish.dart';
 
 import 'fen.dart';
+import 'san.dart';
 
 /// On-device Stockfish via the `stockfish` Flutter package (iOS / Android).
 ///
@@ -227,7 +228,10 @@ class StockfishInfo {
 }
 
 class ExplainMove {
-  /// Plain-language reason based on eval + PV (not full chess commentary).
+  /// Engine-backed plain-language reason (eval / mate / depth / PV).
+  ///
+  /// Does not invent tactics prose — only what Stockfish reported, plus SAN
+  /// notation when the FEN allows a legal conversion.
   static String compose({
     required String fen,
     required String bestMoveUci,
@@ -239,9 +243,6 @@ class ExplainMove {
   }) {
     final pos = FenPosition(fen);
     final side = pos.sideToMoveLabel;
-    final move = bestMoveUci == '(none)' || bestMoveUci == '(timeout)'
-        ? 'no move'
-        : bestMoveUci;
 
     if (bestMoveUci == '(timeout)') {
       return 'Analysis timed out before a recommendation for $side.';
@@ -250,26 +251,32 @@ class ExplainMove {
       return 'Stockfish found no legal move for $side (checkmate or stalemate).';
     }
 
+    final bestSan = SanLine.uciToSan(fen, bestMoveUci);
+    final moveLabel = bestSan != null
+        ? '$bestSan ($bestMoveUci)'
+        : bestMoveUci;
+
     final buf = StringBuffer();
-    buf.write('For $side, Stockfish prefers $move');
+    buf.write('For $side, Stockfish prefers $moveLabel');
 
     if (mateIn != null) {
       final n = mateIn.abs();
       if (mateIn > 0) {
         buf.write(' — forcing mate in $n');
       } else {
-        buf.write(' — the only way to delay mate (mate in $n against us)');
+        buf.write(' — delaying mate (mate in $n against the side to move)');
       }
     } else if (scoreCp != null) {
-      // UCI scores are from the side to move's perspective in Stockfish…
-      // Actually classic Stockfish reports score from the side to move.
-      // Positive = good for the side about to move.
+      // Stockfish UCI scores are from the side to move's perspective.
       final pawns = (scoreCp / 100).toStringAsFixed(2);
       if (scoreCp >= 80) {
-        buf.write(' — evaluation about +$pawns pawns in favor of the side to move');
+        buf.write(
+          ' — evaluation about +$pawns pawns in favor of the side to move',
+        );
       } else if (scoreCp <= -80) {
         buf.write(
-          ' — still the best try; position is about ${pawns.replaceFirst('-', '−')} pawns against the side to move',
+          ' — still the best try; position is about '
+          '${pawns.replaceFirst('-', '−')} pawns against the side to move',
         );
       } else {
         buf.write(' — roughly equal (about $pawns pawns)');
@@ -280,9 +287,14 @@ class ExplainMove {
       buf.write('. Searched to depth $depth');
     }
 
-    if (pvUci.length > 1) {
-      final preview = pvUci.take(6).join(' ');
-      buf.write('. Main line: $preview');
+    final line = SanLine.fromPv(fen: fen, pvUci: pvUci.take(6).toList());
+    if (line.moves.length > 1) {
+      final kind = line.usedSan ? 'Main line (SAN)' : 'Main line (UCI)';
+      buf.write('. $kind: ${line.joined}');
+    } else if (pvUci.length == 1 && bestSan != null) {
+      // Single-ply PV already covered by the preferred move label.
+    } else if (pvUci.isNotEmpty && bestSan == null) {
+      buf.write('. Principal variation: ${pvUci.take(6).join(' ')}');
     }
 
     buf.write('.');
@@ -328,4 +340,19 @@ class EngineResult {
     }
     return '—';
   }
+
+  /// Always-readable explanation for UI; never empty after a completed analyze.
+  String get whyThisMove {
+    if (explanation.trim().isNotEmpty) return explanation;
+    if (detail.trim().isNotEmpty) return detail;
+    return 'Stockfish recommended $bestMoveUci'
+        '${depth != null ? ' at depth $depth' : ''}'
+        ' (eval $scoreLabel).';
+  }
+
+  /// SAN principal variation when convertible; otherwise UCI.
+  SanLine get principalVariation => SanLine.fromPv(
+        fen: fen,
+        pvUci: pvUci.take(6).toList(),
+      );
 }

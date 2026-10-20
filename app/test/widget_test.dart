@@ -4,6 +4,7 @@ import 'package:chesshihi/capture/replaykit_service.dart';
 import 'package:chesshihi/engine/fen.dart';
 import 'package:chesshihi/engine/stockfish_service.dart';
 import 'package:chesshihi/fair_play.dart';
+import 'package:chesshihi/engine/san.dart';
 import 'package:chesshihi/main.dart';
 import 'package:chesshihi/vision/board_recognizer.dart';
 import 'package:flutter/widgets.dart';
@@ -20,6 +21,12 @@ void main() {
 
     // ListView builds lazily — scroll to controls below the fold.
     await tester.scrollUntilVisible(
+      find.text('Capture'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Capture'), findsOneWidget);
+    await tester.scrollUntilVisible(
       find.text('Side to move'),
       200,
       scrollable: find.byType(Scrollable).first,
@@ -31,6 +38,12 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Speak best move'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Watch & capture'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Watch & capture'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Screen capture (ReplayKit)'),
       200,
@@ -157,6 +170,27 @@ void main() {
     expect(text.toLowerCase(), contains('white to move'));
     expect(text, contains('e2e4'));
     expect(text, contains('depth 12'));
+    expect(text, contains('e4')); // SAN for e2e4
+    expect(text, contains('Main line (SAN)'));
+    expect(text.isNotEmpty, isTrue);
+  });
+
+  test('SanLine converts starting PV to SAN', () {
+    final line = SanLine.fromPv(
+      fen: BoardRecognizer.startingFen,
+      pvUci: const ['e2e4', 'e7e5', 'g1f3'],
+    );
+    expect(line.usedSan, isTrue);
+    expect(line.moves, ['e4', 'e5', 'Nf3']);
+  });
+
+  test('EngineResult.whyThisMove never empty for stub analyze', () async {
+    final engine = StockfishService();
+    final result = await engine.analyze(BoardRecognizer.startingFen);
+    expect(result.whyThisMove.trim().isNotEmpty, isTrue);
+    expect(result.explanation.trim().isNotEmpty, isTrue);
+    expect(result.scoreLabel, isNot(equals('—')));
+    engine.dispose();
   });
 
   test('desktop analyze stub respects black to move', () async {
