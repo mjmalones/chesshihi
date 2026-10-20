@@ -41,8 +41,9 @@ class BoardRecognizer {
       fen: placeholderFen,
       source: RecognitionSource.stub,
       note:
-          'Stub FEN for Photos pick. TODO: port OpenCV PoC / on-device vision '
-          'so this becomes a real recognition result.',
+          'Stub FEN for Photos/camera pick (piece placement not read yet). '
+          'Set Side to move below before analyzing. TODO: port OpenCV PoC / '
+          'on-device vision for real board reading.',
     );
   }
 }

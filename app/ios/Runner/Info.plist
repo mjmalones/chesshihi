@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Chesshihi captures a board frame for training and accessibility analysis — not for live online engine assist.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Chesshihi reads a board screenshot from Photos to recognize the position for analysis and accessibility — not for live engine assist.</string>
 	<key>UIApplicationSceneManifest</key>
