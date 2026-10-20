@@ -1,0 +1,31 @@
+[project]
+name = "chesshihi"
+version = "0.1.0"
+description = "Chess board screenshot → FEN → Stockfish analysis (training / accessibility PoC)"
+readme = "README.md"
+authors = [
+    { name = "Chesshihi", email = "chesshihi@example.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "pillow>=10.0",
+    "python-chess>=1.10",
+    "click>=8.1",
+]
+
+[project.scripts]
+chesshihi = "chesshihi.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.3,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
