@@ -43,6 +43,17 @@ BUILT_IPA="$(find build/ios/ipa -name '*.ipa' 2>/dev/null | head -1 || true)"
 if [[ -n "${BUILT_IPA}" ]]; then
   cp -f "$BUILT_IPA" "$OUT_DIR/$IPA_NAME"
   echo "Wrote $OUT_DIR/$IPA_NAME (from flutter build ipa)"
+  # ReplayKit: confirm Broadcast Upload Extension is packaged.
+  VERIFY_STAGE="$(mktemp -d)"
+  unzip -q "$OUT_DIR/$IPA_NAME" -d "$VERIFY_STAGE"
+  if [[ ! -d "$VERIFY_STAGE/Payload/Runner.app/PlugIns/BroadcastUploadExtension.appex" ]]; then
+    echo "error: BroadcastUploadExtension.appex missing from IPA" >&2
+    find "$VERIFY_STAGE/Payload" -maxdepth 4 -type d || true
+    rm -rf "$VERIFY_STAGE"
+    exit 1
+  fi
+  echo "OK: BroadcastUploadExtension.appex embedded"
+  rm -rf "$VERIFY_STAGE"
   exit 0
 fi
 

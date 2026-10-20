@@ -7,13 +7,13 @@ Two slices live in this repo:
 | Slice | Path | What it does |
 |-------|------|----------------|
 | Python vision PoC | `src/chesshihi/` | Screenshot → OpenCV FEN → system Stockfish (Linux) |
-| Flutter iOS app | `app/` | Photos/sample board → FEN (stub/samples) → on-device Stockfish → TTS |
+| Flutter iOS app | `app/` | Photos/sample/ReplayKit board → FEN (stub/samples) → on-device Stockfish → TTS |
 
 ## Hard constraint: no Linux → IPA
 
 **Flutter cannot build iOS without macOS + Xcode.** Linux/Windows Flutter will not emit an `.ipa`. Karl has **no Mac**, so the supported path is **cloud macOS CI** that produces an **unsigned IPA** for his external signer (Sideloadly / AltStore / etc.). No Apple Developer paid account is required for the build step.
 
-→ Full steps: **[docs/ios-sideload.md](docs/ios-sideload.md)**
+→ Full steps: **[docs/ios-sideload.md](docs/ios-sideload.md)** · ReplayKit: **[docs/replaykit.md](docs/replaykit.md)**
 
 ### Get an IPA for your signer (primary: Codemagic)
 
@@ -32,10 +32,10 @@ Local Mac helper (optional, not required): `./scripts/build-unsigned-ipa.sh` →
 
 Minimal device slice:
 
-- Pick a board screenshot from Photos, or use shipped sample assets
-- Show recognized FEN (samples map to canned FENs; Photos picks use a **stub FEN** with a clear TODO to port the OpenCV PoC)
+- Pick a board screenshot from Photos, use shipped sample assets, or **ReplayKit** broadcast (Control Center → Screen Recording → Chesshihi)
+- Show recognized FEN (samples map to canned FENs; Photos/camera/broadcast use a **stub FEN** with a clear TODO to port the OpenCV PoC)
 - Run on-device Stockfish (`stockfish` Flutter package) and **speak** the best move (`flutter_tts`)
-- Fair-play banner in the UI
+- Fair-play banner in the UI — no silent Chess.com capture
 
 ### Develop / verify on Linux
 

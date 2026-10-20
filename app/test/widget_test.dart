@@ -1,3 +1,4 @@
+import 'package:chesshihi/capture/replaykit_service.dart';
 import 'package:chesshihi/engine/fen.dart';
 import 'package:chesshihi/engine/stockfish_service.dart';
 import 'package:chesshihi/fair_play.dart';
@@ -28,6 +29,72 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Speak best move'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Screen capture (ReplayKit)'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Screen capture (ReplayKit)'), findsOneWidget);
+    expect(find.textContaining('Control Center'), findsWidgets);
+    expect(find.textContaining('cannot silently capture'), findsOneWidget);
+  });
+
+  test('FrameIngestPolicy skips identical and too-soon frames', () {
+    const policy = FrameIngestPolicy(minInterval: Duration(milliseconds: 500));
+    final t0 = DateTime.utc(2026, 1, 1, 12, 0, 0);
+    expect(
+      policy.shouldIngest(
+        candidateHash: 'abc',
+        lastHash: null,
+        lastIngestAt: null,
+        now: t0,
+      ),
+      isTrue,
+    );
+    expect(
+      policy.shouldIngest(
+        candidateHash: 'abc',
+        lastHash: 'abc',
+        lastIngestAt: t0,
+        now: t0.add(const Duration(seconds: 2)),
+      ),
+      isFalse,
+    );
+    expect(
+      policy.shouldIngest(
+        candidateHash: 'def',
+        lastHash: 'abc',
+        lastIngestAt: t0,
+        now: t0.add(const Duration(milliseconds: 100)),
+      ),
+      isFalse,
+    );
+    expect(
+      policy.shouldIngest(
+        candidateHash: 'def',
+        lastHash: 'abc',
+        lastIngestAt: t0,
+        now: t0.add(const Duration(milliseconds: 500)),
+      ),
+      isTrue,
+    );
+  });
+
+  test('BroadcastState parses App Group payload', () {
+    final state = BroadcastState.fromMap({
+      'available': true,
+      'appGroupReady': true,
+      'status': 'started',
+      'framePath': '/tmp/latest_frame.jpg',
+      'updatedAtMs': 123,
+      'contentHash': 'deadbeef',
+      'frameCount': 4,
+      'appGroupId': 'group.com.chesshihi.chesshihi',
+    });
+    expect(state.isBroadcasting, isTrue);
+    expect(state.status.label, contains('Broadcasting'));
+    expect(state.frameCount, 4);
+    expect(state.appGroupId, 'group.com.chesshihi.chesshihi');
   });
 
   test('sample assets map to known FENs', () {
