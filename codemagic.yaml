@@ -23,6 +23,13 @@ workflows:
         script: |
           cd app
           flutter pub get
+      - name: Ensure Stockfish NNUE nets (iOS Release LTO)
+        script: |
+          set -euo pipefail
+          # stockfish 1.8.x embeds nets via incbin; Release+LTO looks in Pods/.
+          # See scripts/ensure-stockfish-nnue.sh and docs/ios-sideload.md.
+          chmod +x scripts/ensure-stockfish-nnue.sh
+          ./scripts/ensure-stockfish-nnue.sh
       - name: Build unsigned IPA
         script: |
           set -euo pipefail

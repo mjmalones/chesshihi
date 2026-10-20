@@ -21,6 +21,9 @@ app/.pub-cache/
 app/.pub/
 app/ios/Pods/
 app/ios/.symlinks/
+# Stockfish NNUE nets staged by scripts/ensure-stockfish-nnue.sh (too large for git)
+app/ios/*.nnue
+app/ios/Pods/*.nnue
 app/ios/Flutter/Flutter.framework
 app/ios/Flutter/Flutter.podspec
 app/ios/Flutter/Generated.xcconfig

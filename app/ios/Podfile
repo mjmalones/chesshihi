@@ -1,0 +1,79 @@
+# CocoaPods for Chesshihi Flutter iOS.
+# platform must stay >= stockfish plugin (12.0); Flutter tooling may raise it.
+platform :ios, '13.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+
+  # stockfish 1.8.x Release + -flto=full: the linker resolves .incbin "nn-….nnue"
+  # against ${PODS_ROOT} (this directory), while the pod downloads nets into
+  # Stockfish/src. Copy pre-fetched nets here so archive builds succeed even if
+  # the pub-cache podspec patch was skipped.
+  # See scripts/ensure-stockfish-nnue.sh and ArjanAswal/Stockfish#57.
+  require 'fileutils'
+  nnues = %w[nn-c288c895ea92.nnue nn-37f18f62d772.nnue]
+  candidates = [
+    File.join(__dir__, '.symlinks', 'plugins', 'stockfish', 'ios', 'Stockfish', 'src'),
+    File.join(__dir__, 'Pods'),
+    __dir__,
+  ]
+  pub_cache = ENV.fetch('PUB_CACHE', File.join(Dir.home, '.pub-cache'))
+  Dir.glob(File.join(pub_cache, 'hosted', '*', 'stockfish-*', 'ios', 'Stockfish', 'src')).each do |p|
+    candidates << p
+  end
+
+  pods_root = installer.sandbox.root.to_s
+  nnues.each do |nn|
+    src = candidates.map { |dir| File.join(dir, nn) }.find { |p| File.file?(p) && File.size(p) > 1_000_000 }
+    next unless src
+
+    dest = File.join(pods_root, nn)
+    begin
+      same = File.exist?(dest) && FileUtils.compare_file(src, dest)
+    rescue StandardError
+      same = false
+    end
+    next if same
+
+    FileUtils.cp(src, dest)
+    Pod::UI.puts "Stockfish NNUE: copied #{nn} → Pods/ (Release LTO incbin)"
+  end
+end

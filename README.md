@@ -92,6 +92,7 @@ docs/ios-sideload.md      # Unsigned IPA via Codemagic / GHA (no local Mac)
 codemagic.yaml            # Primary cloud macOS IPA workflow
 .github/workflows/ios-ipa.yml
 scripts/build-unsigned-ipa.sh
+scripts/ensure-stockfish-nnue.sh  # NNUE nets for iOS Release/archive (stockfish 1.8.x)
 src/chesshihi/            # Python OpenCV → FEN → Stockfish PoC
 assets/                   # Shared sample boards + templates (PoC)
 ```

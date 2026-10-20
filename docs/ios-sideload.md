@@ -10,7 +10,7 @@ Fair play: Chesshihi is for **analysis, training, and accessibility** only — n
 
 In-repo config: [`codemagic.yaml`](../codemagic.yaml) → workflow `ios-unsigned-ipa`.
 
-1. Create a free account at [codemagic.io](https://codemagic.io) and **connect the `karl-code/genesis` git remote**.
+1. Create a free account at [codemagic.io](https://codemagic.io) and **connect [mjmalones/chesshihi](https://github.com/mjmalones/chesshihi)**.
 2. Codemagic should detect `codemagic.yaml`. Select workflow **Chesshihi unsigned IPA** / `ios-unsigned-ipa`.
 3. Start a build (manual is fine).
 4. When green, download the artifact **`chesshihi-unsigned.ipa`**.
@@ -19,11 +19,22 @@ In-repo config: [`codemagic.yaml`](../codemagic.yaml) → workflow `ios-unsigned
 What the workflow runs (conceptually):
 
 ```bash
-cd app
-flutter pub get
-flutter build ipa --no-codesign
+cd app && flutter pub get
+./scripts/ensure-stockfish-nnue.sh   # Stockfish NNUE nets (required for iOS Release)
+cd app && flutter build ipa --no-codesign
 # fallback if needed: flutter build ios --no-codesign + zip Payload/Runner.app → .ipa
 ```
+
+### Stockfish NNUE prerequisite
+
+The `stockfish` Flutter plugin (1.8.x) embeds two neural-net eval files at compile time via `incbin`:
+
+- `nn-c288c895ea92.nnue` (~104 MB)
+- `nn-37f18f62d772.nnue` (~3.4 MB)
+
+Debug builds find them under the pod’s `Stockfish/src` (`-I`). **Release / archive builds use `-flto=full`**, so the linker resolves `.incbin` against `ios/Pods/` instead — without the files there you get `Could not find incbin file 'nn-….nnue'`.
+
+`scripts/ensure-stockfish-nnue.sh` (wired into Codemagic, GitHub Actions, and `build-unsigned-ipa.sh`) downloads the nets into the plugin, patches the podspec to also copy them into `${PODS_ROOT}`, and stages copies under `app/ios/`. Nets are **not** committed (too large); CI always fetches them. See [ArjanAswal/Stockfish#57](https://github.com/ArjanAswal/Stockfish/issues/57).
 
 ## Alternate path: GitHub Actions `macos-latest`
 
@@ -45,9 +56,10 @@ If you ever have macOS + Xcode locally:
 ```bash
 ./scripts/build-unsigned-ipa.sh
 # → dist/chesshihi-unsigned.ipa
+# (runs ensure-stockfish-nnue.sh after pub get)
 ```
 
-On Linux/Windows the script **exits with an error** and points you at CI — by design.
+On Linux/Windows the IPA script **exits with an error** and points you at CI — by design. You can still run `./scripts/ensure-stockfish-nnue.sh` on Linux after `flutter pub get` to verify NNUE download + podspec patch.
 
 ## After you have the IPA
 
