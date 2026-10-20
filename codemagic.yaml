@@ -58,6 +58,19 @@ workflows:
             rm -rf "$STAGE"
           fi
           ls -la "$CM_BUILD_DIR/dist/chesshihi-unsigned.ipa"
+          # ReplayKit: ensure Broadcast Upload Extension is inside the IPA.
+          VERIFY_STAGE="$(mktemp -d)"
+          unzip -q "$CM_BUILD_DIR/dist/chesshihi-unsigned.ipa" -d "$VERIFY_STAGE"
+          if [ -d "$VERIFY_STAGE/Payload/Runner.app/PlugIns/BroadcastUploadExtension.appex" ]; then
+            echo "OK: BroadcastUploadExtension.appex embedded in IPA"
+            ls -la "$VERIFY_STAGE/Payload/Runner.app/PlugIns/"
+          else
+            echo "error: BroadcastUploadExtension.appex missing from IPA (ReplayKit)" >&2
+            find "$VERIFY_STAGE/Payload" -maxdepth 4 -type d || true
+            rm -rf "$VERIFY_STAGE"
+            exit 1
+          fi
+          rm -rf "$VERIFY_STAGE"
     artifacts:
       - dist/chesshihi-unsigned.ipa
       - app/build/ios/ipa/*.ipa

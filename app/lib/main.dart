@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'capture/frame_ingest.dart';
+import 'capture/replaykit_service.dart';
 import 'engine/fen.dart';
 import 'engine/stockfish_service.dart';
 import 'fair_play.dart';
@@ -48,6 +51,9 @@ class _HomePageState extends State<HomePage> {
   final _engine = StockfishService();
   final _announcer = MoveAnnouncer();
   final _picker = ImagePicker();
+  final _replayKit = ReplayKitService();
+  final _frameIngest = FrameIngest();
+  final _framePolicy = const FrameIngestPolicy();
 
   String? _imageLabel;
   ImageProvider? _preview;
@@ -60,8 +66,15 @@ class _HomePageState extends State<HomePage> {
   bool _speakBestMove = true;
 
   /// Training/review capture loop — not for live online engine assist.
-  /// When on, each Photos/camera frame auto-runs analysis for the set side.
+  /// When on, each Photos/camera/ReplayKit frame auto-runs analysis for the set side.
   bool _liveWatch = false;
+
+  /// Poll App Group for ReplayKit frames (training/review only).
+  bool _screenCaptureWatch = false;
+  BroadcastState _broadcast = BroadcastState.unsupported;
+  Timer? _broadcastPoll;
+  String? _lastBroadcastHash;
+  DateTime? _lastBroadcastIngestAt;
 
   static const _samples = [
     (
@@ -85,6 +98,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _broadcastPoll?.cancel();
     _engine.dispose();
     _announcer.dispose();
     super.dispose();
@@ -120,18 +134,77 @@ class _HomePageState extends State<HomePage> {
       final label = source == ImageSource.camera
           ? 'Camera: ${file.name}'
           : 'Photos: ${file.name}';
-      setState(() {
-        _imageLabel = label;
-        _preview = FileImage(File(file.path));
-      });
-      _setRecognition(_recognizer.recognize(pickedLabel: file.name));
-      if (_liveWatch) {
-        // Auto-analyze each new frame (training/review). Respects speak toggle.
-        await _analyze();
-      }
+      await _ingestLocalFile(File(file.path), label: label);
     } catch (e) {
       setState(() => _error = 'Could not open image: $e');
     }
+  }
+
+  /// Apply current side-to-move to a freshly recognized (often stub) FEN.
+  RecognitionResult _withCurrentSide(RecognitionResult result) {
+    final side = _fen?.sideToMove;
+    if (side == null) return result;
+    final nextFen = FenPosition(result.fen).withSideToMove(side);
+    if (nextFen == result.fen) return result;
+    return RecognitionResult(
+      fen: nextFen,
+      source: result.source,
+      note: result.note,
+    );
+  }
+
+  Future<void> _ingestLocalFile(File file, {required String label}) async {
+    setState(() {
+      _imageLabel = label;
+      _preview = FileImage(file);
+    });
+    final recognized = _withCurrentSide(
+      _frameIngest.recognizeFile(file, label: label),
+    );
+    _setRecognition(recognized);
+    if (_liveWatch || _screenCaptureWatch) {
+      await _analyze();
+    }
+  }
+
+  void _setScreenCaptureWatch(bool enabled) {
+    setState(() => _screenCaptureWatch = enabled);
+    _broadcastPoll?.cancel();
+    _broadcastPoll = null;
+    if (!enabled) return;
+    // Also enable live-watch semantics for analyze-on-frame.
+    if (!_liveWatch) {
+      setState(() => _liveWatch = true);
+    }
+    _broadcastPoll = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      unawaited(_pollBroadcast());
+    });
+    unawaited(_pollBroadcast());
+  }
+
+  Future<void> _pollBroadcast() async {
+    if (!_screenCaptureWatch || !mounted) return;
+    final state = await _replayKit.getState();
+    if (!mounted) return;
+    setState(() => _broadcast = state);
+
+    if (!_framePolicy.shouldIngest(
+      candidateHash: state.contentHash,
+      lastHash: _lastBroadcastHash,
+      lastIngestAt: _lastBroadcastIngestAt,
+      now: DateTime.now(),
+    )) {
+      return;
+    }
+    if (!state.hasFrame || _busy) return;
+
+    final path = state.framePath!;
+    _lastBroadcastHash = state.contentHash;
+    _lastBroadcastIngestAt = DateTime.now();
+    await _ingestLocalFile(
+      File(path),
+      label: 'Broadcast frame #${state.frameCount}',
+    );
   }
 
   void _setSideToMove(String side) {
@@ -331,15 +404,22 @@ class _HomePageState extends State<HomePage> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Live watch (training / review)'),
                 subtitle: const Text(
-                  'When on, each Capture frame / Photos pick auto-analyzes '
-                  'for the selected side to move. True continuous Chess.com '
-                  'screen reading needs ReplayKit (later). Vision is still '
-                  'stubbed for camera/Photos — set Side to move yourself. '
+                  'When on, each Capture frame / Photos pick / ReplayKit '
+                  'frame auto-analyzes for the selected side to move. '
+                  'Vision is still stubbed — set Side to move yourself. '
                   'Not for live online engine assist.',
                 ),
                 value: _liveWatch,
                 onChanged:
                     _busy ? null : (v) => setState(() => _liveWatch = v),
+              ),
+              const SizedBox(height: 8),
+              _ScreenCaptureSection(
+                scheme: scheme,
+                supported: _replayKit.isSupported,
+                watching: _screenCaptureWatch,
+                broadcast: _broadcast,
+                onWatchChanged: _busy ? null : _setScreenCaptureWatch,
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -410,6 +490,80 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ScreenCaptureSection extends StatelessWidget {
+  const _ScreenCaptureSection({
+    required this.scheme,
+    required this.supported,
+    required this.watching,
+    required this.broadcast,
+    required this.onWatchChanged,
+  });
+
+  final ColorScheme scheme;
+  final bool supported;
+  final bool watching;
+  final BroadcastState broadcast;
+  final ValueChanged<bool>? onWatchChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusLine = !supported
+        ? 'ReplayKit is iOS-only — build/sideload an IPA to use screen capture.'
+        : !broadcast.appGroupReady && broadcast.available
+            ? 'App Group not ready — Karl’s signer must include '
+                'group.com.chesshihi.chesshihi on app + extension.'
+            : broadcast.status.label;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel('Screen capture (ReplayKit)'),
+        Text(
+          'You must start Screen Recording from Control Center and select '
+          'Chesshihi. Chesshihi cannot silently capture Chess.com (or any '
+          'other app). For analysis, training, and accessibility only — '
+          'not live online engine assist.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '1. Open Control Center → Screen Recording (long-press).\n'
+          '2. Choose Chesshihi as the broadcast app, then Start.\n'
+          '3. Switch to the board you want to review.\n'
+          '4. Return here with “Watch broadcast frames” on.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurface,
+              ),
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Watch broadcast frames'),
+          subtitle: Text(
+            watching
+                ? 'Polling App Group for new frames (throttled; identical '
+                    'frames skipped). Enables Live watch.'
+                : 'Off — start a Chesshihi broadcast from Control Center first.',
+          ),
+          value: watching,
+          onChanged: supported ? onWatchChanged : null,
+        ),
+        Text(
+          'Status: $statusLine'
+          '${broadcast.frameCount > 0 ? ' · frames ${broadcast.frameCount}' : ''}',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: broadcast.isBroadcasting
+                    ? scheme.primary
+                    : scheme.onSurfaceVariant,
+              ),
+        ),
+      ],
     );
   }
 }

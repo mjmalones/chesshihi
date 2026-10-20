@@ -19,6 +19,7 @@ class BoardRecognizer {
   RecognitionResult recognize({
     String? assetPath,
     String? pickedLabel,
+    String? imagePath,
   }) {
     if (assetPath != null) {
       if (assetPath.contains('italian')) {
@@ -37,18 +38,27 @@ class BoardRecognizer {
       }
     }
 
+    final fromBroadcast = pickedLabel != null &&
+        pickedLabel.toLowerCase().contains('broadcast');
+    final source =
+        fromBroadcast ? RecognitionSource.broadcastStub : RecognitionSource.stub;
+    final origin = fromBroadcast
+        ? 'ReplayKit broadcast frame'
+        : 'Photos/camera pick';
+    final pathNote = imagePath == null ? '' : ' Path: $imagePath.';
+
     return RecognitionResult(
       fen: placeholderFen,
-      source: RecognitionSource.stub,
+      source: source,
       note:
-          'Stub FEN for Photos/camera pick (piece placement not read yet). '
+          'Stub FEN for $origin (piece placement not read yet).$pathNote '
           'Set Side to move below before analyzing. TODO: port OpenCV PoC / '
           'on-device vision for real board reading.',
     );
   }
 }
 
-enum RecognitionSource { sampleAsset, stub }
+enum RecognitionSource { sampleAsset, stub, broadcastStub }
 
 class RecognitionResult {
   const RecognitionResult({
@@ -61,5 +71,7 @@ class RecognitionResult {
   final RecognitionSource source;
   final String note;
 
-  bool get isStub => source == RecognitionSource.stub;
+  bool get isStub =>
+      source == RecognitionSource.stub ||
+      source == RecognitionSource.broadcastStub;
 }

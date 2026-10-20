@@ -73,6 +73,16 @@ jobs:
             rm -rf "$STAGE"
           fi
           ls -la ../dist/chesshihi-unsigned.ipa
+          VERIFY_STAGE="$(mktemp -d)"
+          unzip -q ../dist/chesshihi-unsigned.ipa -d "$VERIFY_STAGE"
+          if [ ! -d "$VERIFY_STAGE/Payload/Runner.app/PlugIns/BroadcastUploadExtension.appex" ]; then
+            echo "error: BroadcastUploadExtension.appex missing from IPA" >&2
+            find "$VERIFY_STAGE/Payload" -maxdepth 4 -type d || true
+            rm -rf "$VERIFY_STAGE"
+            exit 1
+          fi
+          echo "OK: BroadcastUploadExtension.appex embedded"
+          rm -rf "$VERIFY_STAGE"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4

@@ -70,6 +70,12 @@ On Linux/Windows the IPA script **exits with an error** and points you at CI —
 
 No paid Apple Developer Program membership is required for the **build** step documented here; your signer’s own requirements still apply for install.
 
+## ReplayKit Broadcast Upload Extension
+
+The unsigned IPA embeds `Runner.app/PlugIns/BroadcastUploadExtension.appex`. Runtime screen capture needs the App Group `group.com.chesshihi.chesshihi` on **both** the app and the extension after re-signing.
+
+→ Full setup, Karl’s signer checklist, and on-device test steps: **[replaykit.md](replaykit.md)**
+
 ## Verify the Flutter app without an IPA (Linux)
 
 ```bash
