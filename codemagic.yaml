@@ -1,0 +1,57 @@
+# Codemagic — primary path when Karl has no Mac.
+# Produces an unsigned/ad-hoc IPA for an external signer (Sideloadly / AltStore / etc.).
+# No Apple Developer paid account required for this workflow.
+#
+# Setup (once):
+#   1. Sign up at https://codemagic.io and connect this git repo.
+#   2. Confirm the workflow id `ios-unsigned-ipa` is detected from this file.
+#   3. Start a build (manual or on push). Download the `chesshihi-unsigned.ipa` artifact.
+#
+# Docs: docs/ios-sideload.md
+
+workflows:
+  ios-unsigned-ipa:
+    name: Chesshihi unsigned IPA
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          cd app
+          flutter pub get
+      - name: Build unsigned IPA
+        script: |
+          set -euo pipefail
+          cd app
+          # macOS CI is required — Flutter cannot emit an IPA from Linux.
+          flutter build ipa --no-codesign || true
+          BUILT_IPA="$(find build/ios/ipa -name '*.ipa' 2>/dev/null | head -1 || true)"
+          mkdir -p "$CM_BUILD_DIR/dist"
+          if [ -n "${BUILT_IPA:-}" ]; then
+            cp -f "$BUILT_IPA" "$CM_BUILD_DIR/dist/chesshihi-unsigned.ipa"
+          else
+            flutter build ios --no-codesign --release
+            APP_PATH=""
+            for candidate in build/ios/iphoneos/Runner.app build/ios/Release-iphoneos/Runner.app; do
+              if [ -d "$candidate" ]; then APP_PATH="$candidate"; break; fi
+            done
+            if [ -z "$APP_PATH" ]; then
+              echo "Runner.app not found" >&2
+              find build/ios -name 'Runner.app' || true
+              exit 1
+            fi
+            STAGE="$(mktemp -d)"
+            mkdir -p "$STAGE/Payload"
+            cp -R "$APP_PATH" "$STAGE/Payload/"
+            (cd "$STAGE" && zip -qr "$CM_BUILD_DIR/dist/chesshihi-unsigned.ipa" Payload)
+            rm -rf "$STAGE"
+          fi
+          ls -la "$CM_BUILD_DIR/dist/chesshihi-unsigned.ipa"
+    artifacts:
+      - dist/chesshihi-unsigned.ipa
+      - app/build/ios/ipa/*.ipa
+      - app/build/**/Runner.app

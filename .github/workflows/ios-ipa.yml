@@ -1,0 +1,75 @@
+# GitHub Actions (macos-latest) — alternate unsigned IPA path when the repo is on GitHub.
+# No Apple Developer paid account required. Re-sign with Sideloadly / AltStore / etc.
+#
+# Trigger: Actions → "iOS unsigned IPA" → Run workflow
+# Artifact: chesshihi-unsigned.ipa
+#
+# NOTE: Flutter cannot build iOS on Linux. This workflow must use a macOS runner.
+# Prefer Codemagic (codemagic.yaml) if this Origin/temp repo is not mirrored to GitHub.
+# Docs: docs/ios-sideload.md
+
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/**"
+      - "scripts/build-unsigned-ipa.sh"
+      - ".github/workflows/ios-ipa.yml"
+      - "codemagic.yaml"
+
+jobs:
+  build-unsigned-ipa:
+    name: Build unsigned IPA
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build unsigned IPA
+        run: |
+          set -euo pipefail
+          flutter build ipa --no-codesign || true
+          BUILT_IPA="$(find build/ios/ipa -name '*.ipa' 2>/dev/null | head -1 || true)"
+          mkdir -p ../dist
+          if [ -n "${BUILT_IPA:-}" ]; then
+            cp -f "$BUILT_IPA" ../dist/chesshihi-unsigned.ipa
+          else
+            flutter build ios --no-codesign --release
+            APP_PATH=""
+            for candidate in build/ios/iphoneos/Runner.app build/ios/Release-iphoneos/Runner.app; do
+              if [ -d "$candidate" ]; then APP_PATH="$candidate"; break; fi
+            done
+            if [ -z "$APP_PATH" ]; then
+              echo "Runner.app not found" >&2
+              find build/ios -name 'Runner.app' || true
+              exit 1
+            fi
+            STAGE="$(mktemp -d)"
+            mkdir -p "$STAGE/Payload"
+            cp -R "$APP_PATH" "$STAGE/Payload/"
+            (cd "$STAGE" && zip -qr "$GITHUB_WORKSPACE/dist/chesshihi-unsigned.ipa" Payload)
+            rm -rf "$STAGE"
+          fi
+          ls -la ../dist/chesshihi-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chesshihi-unsigned-ipa
+          path: dist/chesshihi-unsigned.ipa
+          if-no-files-found: error
